@@ -2,7 +2,11 @@ import express from "express";
 import session from "express-session";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createCanvas, loadImage, registerFont } from "canvas";
+//import { createCanvas, loadImage, registerFont } from "canvas";
+//// from:
+// import { createCanvas, loadImage, registerFont } from "canvas";
+// to:
+import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import { TwitterApi } from "twitter-api-v2";
 import dotenv from "dotenv";
 
@@ -110,9 +114,7 @@ app.get("/callback", async (req, res) => {
 // Step 3: Generate dynamic card
 
 // Register Manrope Bold (true bold glyphs)
-registerFont(path.join(__dirname, "assets/fonts/Manrope-Bold.ttf"), {
-  family: "Manrope",
-});
+GlobalFonts.registerFromPath(path.join(process.cwd(), "public/fonts/Manrope-Bold.ttf"), "Manrope");
 
 app.get("/card", async (req, res) => {
   console.log("[INFO] GET /card — generating card");
