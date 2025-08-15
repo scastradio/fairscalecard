@@ -70,7 +70,7 @@ app.get("/", (req, res) => {
       text-align: center;
     }
     .logo {
-      width: 180px;
+      width: 500px;
       height: auto;
       margin: 0 auto 28px auto;
       display: block;
