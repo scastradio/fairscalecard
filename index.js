@@ -136,7 +136,8 @@ app.get("/", (req, res) => {
         </svg>
         Connect with Twitter
       </a>
-      <footer>By continuing you agree to simulate non-production scores.</footer>
+      <footer>By continuing you agree to simulate non-production scores.<br>
+      Made with ❤️ by <strong>FAIRSCALE</strong></footer>
     </section>
   </main>
 </body>
