@@ -118,15 +118,15 @@ app.get("/", (req, res) => {
       <img class="logo" src="/assets/logo.png" alt="Logo" draggable="false" />
       <h1>Score Card Simulator</h1>
       <p>
-        Generate a sleek, mock score card based on your Twitter profile. We’ll ask you
+        Generate a sleek, mock score card based on your X profile. We’ll ask you
         to connect your account, pull your profile picture and handle, and instantly
         render a preview card with simulated metrics—perfect for demos and prelaunch teasers.
       </p>
-      <a class="cta" href="/login" aria-label="Connect with Twitter">
+      <a class="cta" href="/login" aria-label="Connect with X">
         <svg class="tw" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M18.244 2H21.5l-7.61 8.707L22.5 22h-6.17l-4.826-5.602L5.92 22H2.66l8.2-9.383L1.9 2h6.24l4.36 5.064L18.244 2Zm-2.158 18h1.706L7.99 4H6.18l9.906 16Z"/>
         </svg>
-        Connect with Twitter
+        Connect with X
       </a>
       <footer>
         By continuing you agree to simulate non-production scores.<br>
@@ -346,7 +346,6 @@ app.get("/preview", (req, res) => {
       <div class="row">
         <a class="btn" href="/card?download=1">Download PNG</a>
         <form method="post" action="/post" style="margin:0">
-          <button class="btn" type="submit">Post to Twitter</button>
         </form>
         <a class="btn ghost" href="/">Back</a>
       </div>
@@ -397,7 +396,7 @@ app.post("/post", async (req, res) => {
     res.redirect("/preview");
   } catch (err) {
     console.error("[ERROR] Failed to post tweet:", err);
-    res.status(500).send("Posting to Twitter failed");
+    res.status(500).send("Posting to X failed");
   }
 });
 
