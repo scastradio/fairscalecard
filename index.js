@@ -286,7 +286,7 @@ async function renderCardBuffer(sessionUser) {
   const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
   const fmt = (n) => n.toLocaleString("en-US");
 
-  drawGoldNumberRight(fmt(randInt(1, 100)),     2420,  604, 2645-2420, 666-604, 70);
+  drawGoldNumberRight(fmt(randInt(1, 1000)),     2420,  604, 2645-2420, 666-604, 70);
   drawGoldNumberRight(fmt(randInt(100, 1000)),  2420,  940, 2645-2420, 998-940, 70);
   drawGoldNumberRight(fmt(randInt(1000, 10000)),2420, 1269, 2645-2420,1334-1269,70);
 
