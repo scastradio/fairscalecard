@@ -15,6 +15,8 @@ dotenv.config();
 // --- Setup ---------------------------------------------------------------
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Serve /assets (logo.png, card.png, etc.)
+app.use("/assets", express.static(path.join(__dirname, "assets")));
 
 app.use(
   session({
@@ -33,13 +35,113 @@ const client = new TwitterApi({
 
 // Home
 app.get("/", (req, res) => {
-  console.log("[INFO] GET /");
-  res.send(
-    `<h2>Twitter Login Demo</h2>
-     <a href="/login">Login with Twitter</a>`
-  );
+  res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Score Card Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --gold: #ffd000;
+      --bg: #000000;
+      --text: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Manrope, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 40px 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+    }
+    .logo {
+      width: 180px;
+      height: auto;
+      margin: 0 auto 28px auto;
+      display: block;
+      filter: drop-shadow(0 2px 12px rgba(0,0,0,0.45));
+      user-select: none;
+    }
+    h1 {
+      margin: 0 0 16px 0;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      font-size: clamp(28px, 4vw, 40px);
+      color: var(--gold);
+    }
+    p {
+      margin: 0 auto 28px auto;
+      max-width: 60ch;
+      line-height: 1.6;
+      opacity: 0.95;
+      font-size: clamp(16px, 2.2vw, 18px);
+    }
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-radius: 999px;
+      background: var(--gold);
+      color: #111;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 16px;
+      border: 0;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+      box-shadow: 0 8px 24px rgba(255, 208, 0, 0.25);
+    }
+    .cta:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .cta:active { transform: translateY(0); filter: brightness(0.98); }
+    .tw {
+      width: 18px; height: 18px; display: inline-block;
+    }
+    footer {
+      margin-top: 22px;
+      opacity: 0.55;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <img class="logo" src="/assets/logo.png" alt="Logo" draggable="false" />
+      <h1>Score Card Simulator</h1>
+      <p>
+        Generate a sleek, mock score card based on your Twitter profile. We’ll ask you
+        to connect your account, pull your profile picture and handle, and instantly
+        render a preview card with simulated metrics—perfect for demos and prelaunch teasers.
+      </p>
+      <a class="cta" href="/login" aria-label="Connect with Twitter">
+        <!-- Simple inline SVG icon (X/Twitter) -->
+        <svg class="tw" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M18.244 2H21.5l-7.61 8.707L22.5 22h-6.17l-4.826-5.602L5.92 22H2.66l8.2-9.383L1.9 2h6.24l4.36 5.064L18.244 2Zm-2.158 18h1.706L7.99 4H6.18l9.906 16Z"/>
+        </svg>
+        Connect with Twitter
+      </a>
+      <footer>By continuing you agree to simulate non-production scores.</footer>
+    </section>
+  </main>
+</body>
+</html>`);
 });
-
 // Step 1: Redirect to Twitter
 app.get("/login", async (req, res) => {
   console.log("[INFO] GET /login — starting Twitter auth flow");
