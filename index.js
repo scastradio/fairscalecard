@@ -2,10 +2,6 @@ import express from "express";
 import session from "express-session";
 import path from "path";
 import { fileURLToPath } from "url";
-//import { createCanvas, loadImage, registerFont } from "canvas";
-//// from:
-// import { createCanvas, loadImage, registerFont } from "canvas";
-// to:
 import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import { TwitterApi } from "twitter-api-v2";
 import dotenv from "dotenv";
@@ -15,6 +11,7 @@ dotenv.config();
 // --- Setup ---------------------------------------------------------------
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
 // Serve /assets (logo.png, card.png, etc.)
 app.use("/assets", express.static(path.join(__dirname, "assets")));
 
@@ -31,9 +28,7 @@ const client = new TwitterApi({
   appSecret: process.env.TWITTER_CONSUMER_SECRET,
 });
 
-// --- Routes --------------------------------------------------------------
-
-// Home
+// --- Home --------------------------------------------------------------
 app.get("/", (req, res) => {
   res.type("html").send(`<!doctype html>
 <html lang="en">
@@ -70,7 +65,7 @@ app.get("/", (req, res) => {
       text-align: center;
     }
     .logo {
-      width: 500px;
+      width: 500px;  /* <- 500px as requested */
       height: auto;
       margin: 0 auto 28px auto;
       display: block;
@@ -109,9 +104,7 @@ app.get("/", (req, res) => {
     }
     .cta:hover { transform: translateY(-1px); filter: brightness(1.05); }
     .cta:active { transform: translateY(0); filter: brightness(0.98); }
-    .tw {
-      width: 18px; height: 18px; display: inline-block;
-    }
+    .tw { width: 18px; height: 18px; display: inline-block; }
     footer {
       margin-top: 22px;
       opacity: 0.55;
@@ -130,29 +123,29 @@ app.get("/", (req, res) => {
         render a preview card with simulated metrics—perfect for demos and prelaunch teasers.
       </p>
       <a class="cta" href="/login" aria-label="Connect with Twitter">
-        <!-- Simple inline SVG icon (X/Twitter) -->
         <svg class="tw" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M18.244 2H21.5l-7.61 8.707L22.5 22h-6.17l-4.826-5.602L5.92 22H2.66l8.2-9.383L1.9 2h6.24l4.36 5.064L18.244 2Zm-2.158 18h1.706L7.99 4H6.18l9.906 16Z"/>
         </svg>
         Connect with Twitter
       </a>
-      <footer>By continuing you agree to simulate non-production scores.<br>
-      Made with ❤️ by <strong>FAIRSCALE</strong></footer>
+      <footer>
+        By continuing you agree to simulate non-production scores.<br>
+        Made with ❤️ by <strong>FAIRSCALE</strong>
+      </footer>
     </section>
   </main>
 </body>
 </html>`);
 });
-// Step 1: Redirect to Twitter
+
+// --- Auth: Step 1 (redirect to Twitter) -------------------------------
 app.get("/login", async (req, res) => {
-  console.log("[INFO] GET /login — starting Twitter auth flow");
   try {
     const authLink = await client.generateAuthLink(
       `${process.env.CALLBACK_URL}/callback`
     );
     req.session.oauth_token = authLink.oauth_token;
     req.session.oauth_token_secret = authLink.oauth_token_secret;
-    console.log("[DEBUG] Temporary OAuth token:", authLink.oauth_token);
     res.redirect(authLink.url);
   } catch (err) {
     console.error("[ERROR] Failed to generate auth link:", err);
@@ -160,19 +153,13 @@ app.get("/login", async (req, res) => {
   }
 });
 
-// Step 2: Callback from Twitter
+// --- Auth: Step 2 (callback) ------------------------------------------
 app.get("/callback", async (req, res) => {
-  console.log("[INFO] GET /callback — returning from Twitter");
-
   const { oauth_token, oauth_verifier } = req.query;
   const savedToken = req.session.oauth_token;
   const savedSecret = req.session.oauth_token_secret;
 
-  console.log("[DEBUG] oauth_token (from query):", oauth_token);
-  console.log("[DEBUG] oauth_verifier:", oauth_verifier);
-
   if (!oauth_token || !oauth_verifier || !savedToken || !savedSecret) {
-    console.error("[ERROR] Missing OAuth parameters or session values");
     return res.status(400).send("Missing auth params");
   }
 
@@ -187,13 +174,7 @@ app.get("/callback", async (req, res) => {
     const { client: userClient, accessToken, accessSecret } =
       await loginClient.login(oauth_verifier);
 
-    console.log("[INFO] Successfully logged in");
-    console.log("[DEBUG] AccessToken:", accessToken);
-    console.log("[DEBUG] AccessSecret:", accessSecret);
-
     const user = await userClient.v1.verifyCredentials();
-    console.log("[INFO] Twitter user:", user.screen_name);
-    console.log("[DEBUG] Profile image (original):", user.profile_image_url_https);
 
     // Prefer high-res if available
     let profileImageUrl = user.profile_image_url_https;
@@ -205,267 +186,226 @@ app.get("/callback", async (req, res) => {
       name: user.name,
       screen_name: user.screen_name,
       image: profileImageUrl,
+      accessToken,   // store for posting later
+      accessSecret,  // store for posting later
     };
 
-    res.redirect("/card");
+    res.redirect("/preview");
   } catch (err) {
     console.error("[ERROR] Twitter login failed:", err);
     res.status(500).send("Login failed");
   }
 });
 
-// Step 3: Generate dynamic card
+// --- Canvas font -------------------------------------------------------
+GlobalFonts.registerFromPath(
+  path.join(process.cwd(), "public/fonts/Manrope-Bold.ttf"),
+  "Manrope"
+);
 
-// Register Manrope Bold (true bold glyphs)
-GlobalFonts.registerFromPath(path.join(process.cwd(), "public/fonts/Manrope-Bold.ttf"), "Manrope");
+// --- Helper: render card to Buffer (used by /card and /post) ----------
+async function renderCardBuffer(sessionUser) {
+  const { screen_name, image } = sessionUser;
 
+  const bg = await loadImage(path.join(__dirname, "assets/card.png"));
+  const pfp = await loadImage(image);
+
+  const canvas = createCanvas(3000, 1700);
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  ctx.drawImage(bg, 0, 0, 3000, 1700);
+
+  // PFP rounded
+  const x = 325, y = 285, w = 1085 - 325, h = 1060 - 285, r = 50;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(pfp, x, y, w, h);
+  ctx.restore();
+
+  // Handle gradient
+  const handle = "@" + screen_name;
+  const boxX = 255, boxY = 1270, boxW = 1165 - 255, boxH = 1400 - 1270;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  let fontSize = 100; ctx.font = `${fontSize}px Manrope`;
+  while (ctx.measureText(handle).width > boxW && fontSize > 10) {
+    fontSize -= 2; ctx.font = `${fontSize}px Manrope`;
+  }
+  const centerX = boxX + boxW / 2, centerY = boxY + boxH / 2;
+  const gradient = ctx.createLinearGradient(0, centerY - fontSize / 2, 0, centerY + fontSize / 2);
+  gradient.addColorStop(0, "#fdde45"); gradient.addColorStop(1, "#ffcf01");
+  ctx.fillStyle = gradient; ctx.fillText(handle, centerX, centerY);
+
+  // Score (right-aligned) — 2420×272 → 2645×332
+  const scoreBoxX = 2420, scoreBoxY = 272, scoreBoxW = 2645 - 2420, scoreBoxH = 332 - 272;
+  const scoreCenterY = scoreBoxY + scoreBoxH / 2;
+  const scoreVal = (Math.random() * 1 + 3.9).toFixed(1); // stick to your current range
+  const numText = scoreVal, slashText = "/", maxText = "5";
+
+  let scoreFontSize = 70; ctx.font = `${scoreFontSize}px Manrope`;
+  const measureAll = () => {
+    const numW = ctx.measureText(numText).width;
+    const slashW = ctx.measureText(slashText).width;
+    const fiveW = ctx.measureText(maxText).width;
+    const gapBeforeSlash = 5, gapAfterSlash = 5;
+    return { total: numW + gapBeforeSlash + slashW + gapAfterSlash + fiveW, numW, slashW, fiveW, gapBeforeSlash, gapAfterSlash };
+  };
+  let dims = measureAll();
+  while (dims.total > scoreBoxW && scoreFontSize > 10) {
+    scoreFontSize -= 2; ctx.font = `${scoreFontSize}px Manrope`; dims = measureAll();
+  }
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const gradient2 = ctx.createLinearGradient(scoreBoxX, scoreBoxY, scoreBoxX + scoreBoxW, scoreBoxY + scoreBoxH);
+  gradient2.addColorStop(0, "#fdde45"); gradient2.addColorStop(1, "#ffcf01");
+  let cursorX = scoreBoxX + scoreBoxW;
+  ctx.fillStyle = gradient2; ctx.fillText(maxText, cursorX, scoreCenterY); cursorX -= dims.fiveW + dims.gapAfterSlash;
+  ctx.fillStyle = "#ffffff"; ctx.fillText(slashText, cursorX, scoreCenterY); cursorX -= dims.slashW + dims.gapBeforeSlash;
+  ctx.fillStyle = gradient2; ctx.fillText(numText, cursorX, scoreCenterY);
+
+  // Helper + three numbers (right aligned)
+  const drawGoldNumberRight = (text, bx, by, bw, bh, startFont = 70) => {
+    const cY = by + bh / 2;
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    let fs = startFont; ctx.font = `${fs}px Manrope`;
+    while (ctx.measureText(text).width > bw && fs > 10) { fs -= 2; ctx.font = `${fs}px Manrope`; }
+    const grad = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+    grad.addColorStop(0, "#fdde45"); grad.addColorStop(1, "#ffcf01");
+    ctx.fillStyle = grad; ctx.fillText(text, bx + bw, cY);
+  };
+  const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const fmt = (n) => n.toLocaleString("en-US");
+
+  drawGoldNumberRight(fmt(randInt(1, 100)),     2420,  604, 2645-2420, 666-604, 70);
+  drawGoldNumberRight(fmt(randInt(100, 1000)),  2420,  940, 2645-2420, 998-940, 70);
+  drawGoldNumberRight(fmt(randInt(1000, 10000)),2420, 1269, 2645-2420,1334-1269,70);
+
+  // Disclaimer centered — 208×1444 → 2800×1545
+  const disclaimer = "SAMPLE CARD PRELAUNCH DOES NOT REFLECT ACTUAL SCORES";
+  const boxXd = 208, boxYd = 1444, boxWd = 2800 - 208, boxHd = 1545 - 1444;
+  const centerXd = boxXd + boxWd / 2, centerYd = boxYd + boxHd / 2;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  let fontSized = 48; ctx.font = `${fontSized}px Manrope`;
+  while (ctx.measureText(disclaimer).width > boxWd && fontSized > 10) { fontSized -= 2; ctx.font = `${fontSized}px Manrope`; }
+  const disclaimerGrad = ctx.createLinearGradient(boxXd, boxYd, boxXd + boxWd, boxYd + boxHd);
+  disclaimerGrad.addColorStop(0, "#fdde45"); disclaimerGrad.addColorStop(1, "#ffcf01");
+  ctx.fillStyle = disclaimerGrad; ctx.fillText(disclaimer, centerXd, centerYd);
+
+  return canvas.toBuffer("image/png");
+}
+
+// --- Preview page (image + actions) ------------------------------------
+app.get("/preview", (req, res) => {
+  if (!req.session.user) return res.redirect("/");
+  const { screen_name } = req.session.user;
+
+  res.type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Preview — Score Card</title>
+  <style>
+    :root { --gold:#ffd000; --bg:#000; --text:#fff; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: Manrope, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .wrap { min-height:100vh; display:grid; place-items:center; padding:32px 16px; }
+    .box { width:100%; max-width:1100px; text-align:center; }
+    h1 { margin:0 0 16px; color:var(--gold); font-weight:800; font-size:clamp(22px,3.6vw,32px); }
+    .imgwrap { overflow:auto; margin:16px auto 24px; border-radius:12px; border:1px solid #222; background:#111; padding:12px; }
+    img { max-width:100%; height:auto; display:block; margin:0 auto; }
+    .row { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+    .btn {
+      appearance:none; border:0; cursor:pointer; text-decoration:none;
+      padding:12px 18px; border-radius:999px; font-weight:800; font-size:14px;
+      background:var(--gold); color:#111; box-shadow:0 8px 24px rgba(255,208,0,.18);
+      transition:transform .12s ease, filter .12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .btn:active { transform: translateY(0); filter: brightness(.98); }
+    .ghost { background:#1f1f1f; color:#fff; box-shadow:none; border:1px solid #2a2a2a; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="box">
+      <h1>Preview for @${screen_name}</h1>
+      <div class="imgwrap">
+        <img src="/card" alt="Generated score card" />
+      </div>
+      <div class="row">
+        <a class="btn" href="/card?download=1">Download PNG</a>
+        <form method="post" action="/post" style="margin:0">
+          <button class="btn" type="submit">Post to Twitter</button>
+        </form>
+        <a class="btn ghost" href="/">Back</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>`);
+});
+
+// --- Card image (PNG); supports ?download=1 ----------------------------
 app.get("/card", async (req, res) => {
-  console.log("[INFO] GET /card — generating card");
-
-  if (!req.session.user) {
-    console.warn("[WARN] No user session found, redirecting to /");
-    return res.redirect("/");
-  }
-
-  const { screen_name, image } = req.session.user;
-
+  if (!req.session.user) return res.redirect("/");
   try {
-    const bg = await loadImage(path.join(__dirname, "assets/card.png"));
-    const pfp = await loadImage(image);
-
-    const canvas = createCanvas(3000, 1700);
-    const ctx = canvas.getContext("2d");
-
-    // Draw background
-    ctx.drawImage(bg, 0, 0, 3000, 1700);
-
-    // --- Draw PFP with rounded corners ---
-    const x = 325;
-    const y = 285;
-    const w = 1085 - 325;
-    const h = 1060 - 285;
-    const r = 50; // keep if you like the bigger rounding
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-    ctx.clip();
-
-    ctx.drawImage(pfp, x, y, w, h);
-    ctx.restore();
-    // ------------------------------------
-
-    // --- Twitter handle with tight vertical gold gradient ---
-    const handle = "@" + screen_name;
-
-    const boxX = 255;
-    const boxY = 1270;
-    const boxW = 1165 - 255;
-    const boxH = 1400 - 1270;
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    let fontSize = 100;
-    ctx.font = `${fontSize}px Manrope`; // true bold from Manrope-Bold.ttf
-    let textWidth = ctx.measureText(handle).width;
-
-    while (textWidth > boxW && fontSize > 10) {
-      fontSize -= 2;
-      ctx.font = `${fontSize}px Manrope`;
-      textWidth = ctx.measureText(handle).width;
+    const png = await renderCardBuffer(req.session.user);
+    if (req.query.download === "1") {
+      res.setHeader("Content-Disposition", 'attachment; filename="scorecard.png"');
     }
-
-    const centerX = boxX + boxW / 2;
-    const centerY = boxY + boxH / 2;
-
-    const gradient = ctx.createLinearGradient(
-      0,
-      centerY - fontSize / 2,
-      0,
-      centerY + fontSize / 2
-    );
-    gradient.addColorStop(0, "#fdde45");
-    gradient.addColorStop(1, "#ffcf01");
-
-    ctx.fillStyle = gradient;
-    ctx.fillText(handle, centerX, centerY);
-
-    // --- Fairscore (4.x/5) in 2420×272 → 2645×332 ---
-    const scoreBoxX = 2420;
-    const scoreBoxY = 272;
-    const scoreBoxW = 2645 - 2420; // 225
-    const scoreBoxH = 332 - 272;   // 60
-    const scoreCenterY = scoreBoxY + scoreBoxH / 2;
-
-    // Random 4.x with one decimal
-    const scoreVal = (Math.random() * 1 + 3.9).toFixed(1); // "4.7"
-    const numText = scoreVal;
-    const slashText = "/";
-    const maxText = "5";
-
-    // Match FAIRSCORE size: start at 70 and fit
-    let scoreFontSize = 70;
-    ctx.font = `${scoreFontSize}px Manrope`;
-
-    // Fit all three pieces with spacing
-    const measureAll = () => {
-      const numW = ctx.measureText(numText).width;
-      const slashW = ctx.measureText(slashText).width;
-      const fiveW = ctx.measureText(maxText).width;
-      const gapBeforeSlash = 5; // extra spacing you wanted
-      const gapAfterSlash = 5;
-      return {
-        total:
-          numW + gapBeforeSlash + slashW + gapAfterSlash + fiveW,
-        numW,
-        slashW,
-        fiveW,
-        gapBeforeSlash,
-        gapAfterSlash,
-      };
-    };
-
-    let dims = measureAll();
-    while (dims.total > scoreBoxW && scoreFontSize > 10) {
-      scoreFontSize -= 2;
-      ctx.font = `${scoreFontSize}px Manrope`;
-      dims = measureAll();
-    }
-
-// Right-align text inside the box
-ctx.textAlign = "right";
-ctx.textBaseline = "middle";
-
-// Gradient for numbers
-const gradient2 = ctx.createLinearGradient(
-  scoreBoxX,
-  scoreBoxY,
-  scoreBoxX + scoreBoxW,
-  scoreBoxY + scoreBoxH
-);
-gradient2.addColorStop(0, "#fdde45");
-gradient2.addColorStop(1, "#ffcf01");
-
-// Start cursor at right edge of box
-let cursorX = scoreBoxX + scoreBoxW;
-
-// Draw "5" with gradient
-ctx.fillStyle = gradient2;
-ctx.fillText(maxText, cursorX, scoreCenterY);
-cursorX -= dims.fiveW + dims.gapAfterSlash;
-
-// Draw "/" in white
-ctx.fillStyle = "#ffffff";
-ctx.fillText(slashText, cursorX, scoreCenterY);
-cursorX -= dims.slashW + dims.gapBeforeSlash;
-
-// Draw "4.x" with gradient
-ctx.fillStyle = gradient2;
-ctx.fillText(numText, cursorX, scoreCenterY);
-
-// Helper: draw a right-aligned, gold-gradient number inside a box
-function drawGoldNumberRight(ctx, text, boxX, boxY, boxW, boxH, startFont = 70) {
-  const centerY = boxY + boxH / 2;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-
-  // Fit text to box width
-  let fontSize = startFont;
-  ctx.font = `${fontSize}px Manrope`;
-  while (ctx.measureText(text).width > boxW && fontSize > 10) {
-    fontSize -= 2;
-    ctx.font = `${fontSize}px Manrope`;
-  }
-
-  // Fresh gradient per box (same as score)
-  const grad = ctx.createLinearGradient(boxX, boxY, boxX + boxW, boxY + boxH);
-  grad.addColorStop(0, "#fdde45");
-  grad.addColorStop(1, "#ffcf01");
-
-  ctx.fillStyle = grad;
-  ctx.fillText(text, boxX + boxW, centerY); // right edge anchor
-}
-
-// Random int helpers (inclusive)
-const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-// Number formatter (commas for thousands, no decimals)
-const formatNumber = (n) => n.toLocaleString("en-US");
-
-// 1) 2420x 604y to 2645x 666y: 1–100
-drawGoldNumberRight(ctx,
-  formatNumber(randInt(1, 100)),
-  2420, 604, 2645 - 2420, 666 - 604,
-  70
-);
-
-// 2) 2420x 940y to 2645x 998y: 100–1000
-drawGoldNumberRight(ctx,
-  formatNumber(randInt(100, 1000)),
-  2420, 940, 2645 - 2420, 998 - 940,
-  70
-);
-
-// 3) 2420x 1269y to 2645x 1334y: 1000–10000
-drawGoldNumberRight(ctx,
-  formatNumber(randInt(1000, 10000)),
-  2420, 1269, 2645 - 2420, 1334 - 1269,
-  70
-);
-// --- Draw disclaimer text centered ---
-const disclaimer = "SAMPLE CARD PRELAUNCH DOES NOT REFLECT ACTUAL SCORES";
-
-const boxXd = 208;
-const boxYd = 1444;
-const boxWd = 2800 - 208;
-const boxHd = 1545 - 1444;
-
-const centerXd = boxXd + boxWd / 2;
-const centerYd = boxYd + boxHd / 2;
-
-ctx.textAlign = "center";
-ctx.textBaseline = "middle";
-
-// Smaller font; shrink-to-fit if needed
-let fontSized = 48;
-// You loaded Manrope-Bold.ttf, so no need to prefix "bold" here:
-ctx.font = `${fontSized}px Manrope`;
-
-while (ctx.measureText(disclaimer).width > boxWd && fontSized > 10) {
-  fontSized -= 2;
-  ctx.font = `${fontSized}px Manrope`;
-}
-
-// Gradient (same gold as elsewhere)
-const disclaimerGrad = ctx.createLinearGradient(boxXd, boxYd, boxXd + boxWd, boxYd + boxHd);
-disclaimerGrad.addColorStop(0, "#fdde45");
-disclaimerGrad.addColorStop(1, "#ffcf01");
-
-ctx.fillStyle = disclaimerGrad;
-ctx.fillText(disclaimer, centerXd, centerYd); // <-- use the disclaimer center
-    // --- End of card drawing ---
     res.setHeader("Content-Type", "image/png");
-    res.send(canvas.toBuffer("image/png"));
+    res.send(png);
   } catch (err) {
     console.error("[ERROR] Failed to generate card:", err);
     res.status(500).send("Card generation failed");
   }
 });
 
-// --- Start ---------------------------------------------------------------
-//const PORT = process.env.PORT || 3000;
-//app.listen(PORT, () => {
-//  console.log(`[INFO] Server running on http://localhost:${PORT}`);
-//});
-//
-export default app
+// --- Post to Twitter ---------------------------------------------------
+app.post("/post", async (req, res) => {
+  if (!req.session.user) return res.redirect("/");
+  const { screen_name, accessToken, accessSecret } = req.session.user || {};
+  if (!accessToken || !accessSecret) {
+    console.error("[ERROR] Missing access tokens in session");
+    return res.status(400).send("Cannot post: missing permissions. Please login again.");
+  }
+
+  try {
+    const userClient = new TwitterApi({
+      appKey: process.env.TWITTER_CONSUMER_KEY,
+      appSecret: process.env.TWITTER_CONSUMER_SECRET,
+      accessToken,
+      accessSecret
+    });
+
+    const buffer = await renderCardBuffer(req.session.user);
+    const mediaId = await userClient.v1.uploadMedia(buffer, { type: "png" });
+    const text = `Score Card Simulator — @${screen_name}`;
+    await userClient.v1.tweet(text, { media_ids: mediaId });
+
+    res.redirect("/preview");
+  } catch (err) {
+    console.error("[ERROR] Failed to post tweet:", err);
+    res.status(500).send("Posting to Twitter failed");
+  }
+});
+
+// --- Export for Vercel --------------------------------------------------
+// For local dev, you can enable an app.listen here if you want.
+// if (process.env.VERCEL !== "1") {
+//   const PORT = process.env.PORT || 3000;
+//   app.listen(PORT, () => console.log(`[INFO] http://localhost:${PORT}`));
+// }
+
+export default app;
