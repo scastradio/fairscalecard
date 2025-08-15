@@ -12,6 +12,9 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
+// Parse form posts (for the tweet text)
+app.use(express.urlencoded({ extended: true }));
+
 // Serve /assets (logo.png, card.png, etc.)
 app.use("/assets", express.static(path.join(__dirname, "assets")));
 
@@ -40,76 +43,23 @@ app.get("/", (req, res) => {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --gold: #ffd000;
-      --bg: #000000;
-      --text: #ffffff;
-    }
+    :root { --gold: #ffd000; --bg: #000000; --text: #ffffff; }
     * { box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Manrope, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
-    .wrap {
-      min-height: 100%;
-      display: grid;
-      place-items: center;
-      padding: 40px 20px;
-    }
-    .card {
-      width: 100%;
-      max-width: 760px;
-      text-align: center;
-    }
-    .logo {
-      width: 500px;  /* <- 500px as requested */
-      height: auto;
-      margin: 0 auto 28px auto;
-      display: block;
-      filter: drop-shadow(0 2px 12px rgba(0,0,0,0.45));
-      user-select: none;
-    }
-    h1 {
-      margin: 0 0 16px 0;
-      font-weight: 800;
-      letter-spacing: 0.2px;
-      font-size: clamp(28px, 4vw, 40px);
-      color: var(--gold);
-    }
-    p {
-      margin: 0 auto 28px auto;
-      max-width: 60ch;
-      line-height: 1.6;
-      opacity: 0.95;
-      font-size: clamp(16px, 2.2vw, 18px);
-    }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: Manrope, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .wrap { min-height: 100%; display: grid; place-items: center; padding: 40px 20px; }
+    .card { width: 100%; max-width: 760px; text-align: center; }
+    .logo { width: 500px; height: auto; margin: 0 auto 28px auto; display: block; filter: drop-shadow(0 2px 12px rgba(0,0,0,0.45)); user-select: none; }
+    h1 { margin: 0 0 16px 0; font-weight: 800; letter-spacing: 0.2px; font-size: clamp(28px, 4vw, 40px); color: var(--gold); }
+    p { margin: 0 auto 28px auto; max-width: 60ch; line-height: 1.6; opacity: 0.95; font-size: clamp(16px, 2.2vw, 18px); }
     .cta {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 20px;
-      border-radius: 999px;
-      background: var(--gold);
-      color: #111;
-      text-decoration: none;
-      font-weight: 800;
-      font-size: 16px;
-      border: 0;
-      cursor: pointer;
-      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-      box-shadow: 0 8px 24px rgba(255, 208, 0, 0.25);
+      display: inline-flex; align-items: center; gap: 10px; padding: 14px 20px; border-radius: 999px;
+      background: var(--gold); color: #111; text-decoration: none; font-weight: 800; font-size: 16px; border: 0; cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease; box-shadow: 0 8px 24px rgba(255, 208, 0, 0.25);
     }
     .cta:hover { transform: translateY(-1px); filter: brightness(1.05); }
     .cta:active { transform: translateY(0); filter: brightness(0.98); }
     .tw { width: 18px; height: 18px; display: inline-block; }
-    footer {
-      margin-top: 22px;
-      opacity: 0.55;
-      font-size: 12px;
-    }
+    footer { margin-top: 22px; opacity: 0.55; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -250,7 +200,7 @@ async function renderCardBuffer(sessionUser) {
   // Score (right-aligned) — 2420×272 → 2645×332
   const scoreBoxX = 2420, scoreBoxY = 272, scoreBoxW = 2645 - 2420, scoreBoxH = 332 - 272;
   const scoreCenterY = scoreBoxY + scoreBoxH / 2;
-  const scoreVal = (Math.random() * 1 + 3.9).toFixed(1); // stick to your current range
+  const scoreVal = (Math.random() * 1 + 3.9).toFixed(1);
   const numText = scoreVal, slashText = "/", maxText = "5";
 
   let scoreFontSize = 70; ctx.font = `${scoreFontSize}px Manrope`;
@@ -309,6 +259,8 @@ app.get("/preview", (req, res) => {
   if (!req.session.user) return res.redirect("/");
   const { screen_name } = req.session.user;
 
+  const defaultTweet = `Score Card Simulator for @${screen_name} — tag @fairforsol #FairForSol`;
+
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
@@ -334,6 +286,26 @@ app.get("/preview", (req, res) => {
     .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
     .btn:active { transform: translateY(0); filter: brightness(.98); }
     .ghost { background:#1f1f1f; color:#fff; box-shadow:none; border:1px solid #2a2a2a; }
+
+    .tweetbox {
+      margin: 14px auto 6px;
+      max-width: 700px;
+      display: grid;
+      gap: 8px;
+      text-align: left;
+    }
+    .tweetbox label { font-size: 12px; opacity: .75; }
+    .tweetbox textarea {
+      width: 100%;
+      min-height: 70px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #2a2a2a;
+      background: #0f0f0f;
+      color: #fff;
+      font: inherit;
+      resize: vertical;
+    }
   </style>
 </head>
 <body>
@@ -343,15 +315,19 @@ app.get("/preview", (req, res) => {
       <div class="imgwrap">
         <img src="/card" alt="Generated score card" />
       </div>
-      <div class="row">
-        <a class="btn" href="/card?download=1">Download PNG</a>
-        <form method="post" action="/post" style="margin:0">
-        </form>
-        <a class="btn ghost" href="/">Back</a>
-      </div>
-      <p style="margin-top:1em; font-size:0.9em; text-align:center; color:#555;">
-  Share on X and tag <strong>@fairforsol</strong>!
-</p>
+
+      <form method="post" action="/post" style="margin:0">
+        <div class="tweetbox">
+          <label for="text">Share on X and tag <strong>@fairforsol</strong>:</label>
+          <textarea id="text" name="text">${defaultTweet}</textarea>
+        </div>
+        <div class="row">
+          <a class="btn" href="/card?download=1">Download PNG</a>
+          <button type="submit" class="btn">Share on X</button>
+          <a class="btn ghost" href="/">Back</a>
+        </div>
+      </form>
+
     </section>
   </main>
 </body>
@@ -374,7 +350,7 @@ app.get("/card", async (req, res) => {
   }
 });
 
-// --- Post to Twitter ---------------------------------------------------
+// --- Post to Twitter (v1.1 upload + tweet) -----------------------------
 app.post("/post", async (req, res) => {
   if (!req.session.user) return res.redirect("/");
   const { screen_name, accessToken, accessSecret } = req.session.user || {};
@@ -382,6 +358,10 @@ app.post("/post", async (req, res) => {
     console.error("[ERROR] Missing access tokens in session");
     return res.status(400).send("Cannot post: missing permissions. Please login again.");
   }
+
+  const userText =
+    (typeof req.body?.text === "string" && req.body.text.trim()) ||
+    `Score Card Simulator for @${screen_name} — tag @fairforsol #FairForSol`;
 
   try {
     const userClient = new TwitterApi({
@@ -392,13 +372,28 @@ app.post("/post", async (req, res) => {
     });
 
     const buffer = await renderCardBuffer(req.session.user);
+
+    // 1) Upload media
     const mediaId = await userClient.v1.uploadMedia(buffer, { type: "png" });
-    const text = `Score Card Simulator — @${screen_name}`;
-    await userClient.v1.tweet(text, { media_ids: mediaId });
+
+    // Optional: set alt text for accessibility
+    try {
+      await userClient.v1.createMediaMetadata(mediaId, {
+        alt_text: {
+          text: "Simulated score card image generated by the Score Card Simulator."
+        }
+      });
+    } catch (metaErr) {
+      // Non-fatal; continue
+      console.warn("[WARN] Media alt text failed:", metaErr?.data || metaErr?.message || metaErr);
+    }
+
+    // 2) Tweet with media
+    await userClient.v1.tweet(userText, { media_ids: mediaId });
 
     res.redirect("/preview");
   } catch (err) {
-    console.error("[ERROR] Failed to post tweet:", err);
+    console.error("[ERROR] Failed to post tweet:", err?.data || err?.message || err);
     res.status(500).send("Posting to X failed");
   }
 });
