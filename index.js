@@ -358,7 +358,9 @@ ctx.fillText(disclaimer, centerXd, centerYd); // <-- use the disclaimer center
 });
 
 // --- Start ---------------------------------------------------------------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`[INFO] Server running on http://localhost:${PORT}`);
-});
+//const PORT = process.env.PORT || 3000;
+//app.listen(PORT, () => {
+//  console.log(`[INFO] Server running on http://localhost:${PORT}`);
+//});
+//
+export default app
