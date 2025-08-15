@@ -349,6 +349,9 @@ app.get("/preview", (req, res) => {
         </form>
         <a class="btn ghost" href="/">Back</a>
       </div>
+      <p style="margin-top:1em; font-size:0.9em; text-align:center; color:#555;">
+  Share on X and tag <strong>@fairforsol</strong>!
+</p>
     </section>
   </main>
 </body>
